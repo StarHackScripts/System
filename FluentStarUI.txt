@@ -7490,147 +7490,52 @@ end)
 
 task.wait(0.01)
 
--- 🔹 Botón definitivo de apertura/cierre para FluentPlus (MÓVIL/TABLET)
-if Mobile then
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local player = Players.LocalPlayer
-    local playerGui = player:WaitForChild("PlayerGui")
+-- 🔹 Botón móvil para mostrar/ocultar FluentPlus
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local UserInputService = game:GetService("UserInputService")
 
-    -- Tamaño fácil de cambiar
-    local BUTTON_SIZE = 56 -- píxeles
+local isMobile = UserInputService.TouchEnabled
+if isMobile then
+    local BUTTON_SIZE = 56
 
-    -- Eliminar cualquier Toggle previo por si acaso (evita duplicados en hot-reloads)
-    if playerGui:FindFirstChild("FluentToggleGui") then
-        playerGui.FluentToggleGui:Destroy()
-    end
+    local ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "FluentMobileToggle"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.Parent = playerGui
+    pcall(function() ProtectGui(ToggleGui) end)
 
-    -- Crear un ScreenGui propio para el botón (no interfiere con otros GUIs)
-    local ToggleScreenGui = Instance.new("ScreenGui")
-    ToggleScreenGui.Name = "FluentToggleGui"
-    ToggleScreenGui.ResetOnSpawn = false
-    ToggleScreenGui.Parent = playerGui
-    if ProtectGui then
-        pcall(ProtectGui, ToggleScreenGui)
-    end
+    local btn = Instance.new("ImageButton")
+    btn.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
+    btn.Position = UDim2.new(0, 20, 1, -BUTTON_SIZE - 20)
+    btn.AnchorPoint = Vector2.new(0, 1)
+    btn.BackgroundTransparency = 0.3
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.Image = "rbxassetid://3926305904"
+    btn.ImageRectOffset = Vector2.new(884, 284)
+    btn.ImageRectSize = Vector2.new(36, 36)
+    btn.ZIndex = 9999
+    btn.Parent = ToggleGui
 
-    -- Crear el botón dentro de nuestro ScreenGui
-    local toggleButton = Instance.new("ImageButton")
-    toggleButton.Name = "FluentMobileToggle"
-    toggleButton.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
-    toggleButton.Position = UDim2.new(0, 20, 1, -BUTTON_SIZE - 20)
-    toggleButton.AnchorPoint = Vector2.new(0, 1)
-    toggleButton.BackgroundTransparency = 0.3
-    toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    toggleButton.Image = "rbxassetid://3926305904" -- ícono tipo hamburguesa
-    toggleButton.ImageRectOffset = Vector2.new(884, 284)
-    toggleButton.ImageRectSize = Vector2.new(36, 36)
-    toggleButton.ImageColor3 = Color3.new(1, 1, 1)
-    toggleButton.AutoButtonColor = true
-    toggleButton.ZIndex = 10000
-    toggleButton.Active = true
-    toggleButton.Draggable = true
-    toggleButton.Parent = ToggleScreenGui
-
-    -- Hacerlo circular y añadir estilo
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = toggleButton
+    corner.Parent = btn
 
     local shadow = Instance.new("UIStroke")
     shadow.Thickness = 1.5
     shadow.Color = Color3.fromRGB(0, 0, 0)
     shadow.Transparency = 0.6
-    shadow.Parent = toggleButton
+    shadow.Parent = btn
 
-    -- función auxiliar: encontrar el ScreenGui de Fluent (fallbacks seguros)
-    local function findFluentGui()
-        if type(Library) == "table" and Library.GUI and Library.GUI:IsA("ScreenGui") then
-            return Library.GUI
-        end
-
-        for _, g in ipairs(playerGui:GetChildren()) do
-            if g:IsA("ScreenGui") and g.Name:lower():find("fluent") then
-                return g
-            end
-        end
-
-        for _, g in ipairs(playerGui:GetChildren()) do
-            if g:IsA("ScreenGui") and g ~= ToggleScreenGui then
-                local found = false
-                for _, d in ipairs(g:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text ~= "" then
-                        if #d.Text > 1 and #d.Text < 160 then
-                            found = true
-                            break
-                        end
-                    end
-                end
-                if found then
-                    return g
-                end
-            end
-        end
-
-        return nil
-    end
-
-    -- si falta Library.Window al inicio, intentar obtener referencia después
-    local function getWindow()
-        if type(Library) == "table" and Library.Window and typeof(Library.Window) == "table" or (type(Library) == "table" and Library.Window and Library.Window:IsA and Library.Window:IsA("table")) then
-            return Library.Window
-        end
-        -- fallback: puede que Library.Window se cree después; buscar por heurística
-        -- si Library.Window no es una instancia sino tabla/objeto, retornarla directamente si existe
-        if type(Library) == "table" and Library.Window then
-            return Library.Window
-        end
-        return nil
-    end
-
-    -- Conexión corregida: llamamos a Library.Window:Minimize() (la función real usada por FluentPlus)
-    toggleButton.MouseButton1Click:Connect(function()
-        -- Animación de pulso
-        local tweenIn = TweenService:Create(toggleButton, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(BUTTON_SIZE * 0.9, BUTTON_SIZE * 0.9)
-        })
-        local tweenOut = TweenService:Create(toggleButton, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
-        })
-        tweenIn:Play()
-        tweenIn.Completed:Wait()
-        tweenOut:Play()
-
-        -- Intentamos obtener la ventana real y llamar a su Minimize()
-        local window = (type(Library) == "table" and Library.Window) or nil
-
-        -- Si no existe aún, reintentar durante un breve periodo (por timing)
-        if not window then
-            for i = 1, 8 do
-                task.wait(0.06)
-                if type(Library) == "table" and Library.Window then
-                    window = Library.Window
-                    break
-                end
-            end
-        end
-
-        if window and typeof(window) == "table" and type(window.Minimize) == "function" then
-            -- Llamamos exactamente a la función que usa el minimizer original
-            pcall(function() window:Minimize() end)
+    local visible = true
+    btn.MouseButton1Click:Connect(function()
+        if not Library or not Library.GUI then
+            warn("[FluentToggle] No se encontró Library.GUI")
             return
         end
-
-        -- como último recurso, si Library.Window no es una tabla/objeto con Minimize,
-        -- intentamos usar la heurística para togglear el ScreenGui (solo si estamos seguros)
-        local candidate = findFluentGui()
-        if candidate and candidate.Parent then
-            candidate.Enabled = not candidate.Enabled
-            return
-        end
-
-        -- Si todo falla, avisar en Output pero no tocar otros GUIs
-        warn("[FluentToggle] No se pudo encontrar Library.Window:Minimize() ni una Fluent GUI segura para togglear.")
+        visible = not visible
+        Library.GUI.Enabled = visible
     end)
 end
 
