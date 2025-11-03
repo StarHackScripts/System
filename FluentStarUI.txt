@@ -7490,14 +7490,31 @@ end)
 
 task.wait(0.01)
 
--- 🔹 Botón de apertura/cierre para móviles y tablets
+-- 🔹 Botón definitivo de apertura/cierre para FluentPlus (MÓVIL/TABLET)
 if Mobile then
-    local player = game:GetService("Players").LocalPlayer
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
 
-    -- 🟢 Cambia este valor si quieres hacerlo más grande o pequeño
+    -- Tamaño fácil de cambiar
     local BUTTON_SIZE = 56 -- píxeles
 
+    -- Eliminar cualquier Toggle previo por si acaso (evita duplicados en hot-reloads)
+    if playerGui:FindFirstChild("FluentToggleGui") then
+        playerGui.FluentToggleGui:Destroy()
+    end
+
+    -- Crear un ScreenGui propio para el botón (no interfiere con otros GUIs)
+    local ToggleScreenGui = Instance.new("ScreenGui")
+    ToggleScreenGui.Name = "FluentToggleGui"
+    ToggleScreenGui.ResetOnSpawn = false
+    ToggleScreenGui.Parent = playerGui
+    if ProtectGui then
+        pcall(ProtectGui, ToggleScreenGui)
+    end
+
+    -- Crear el botón dentro de nuestro ScreenGui
     local toggleButton = Instance.new("ImageButton")
     toggleButton.Name = "FluentMobileToggle"
     toggleButton.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
@@ -7513,42 +7530,102 @@ if Mobile then
     toggleButton.ZIndex = 10000
     toggleButton.Active = true
     toggleButton.Draggable = true
-    toggleButton.Parent = playerGui:WaitForChild("ScreenGui")
+    toggleButton.Parent = ToggleScreenGui
 
-    -- Hacerlo circular
+    -- Hacerlo circular y añadir estilo
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(1, 0)
     corner.Parent = toggleButton
 
-    -- Efecto sutil de sombra
     local shadow = Instance.new("UIStroke")
     shadow.Thickness = 1.5
     shadow.Color = Color3.fromRGB(0, 0, 0)
     shadow.Transparency = 0.6
     shadow.Parent = toggleButton
 
-    -- Estado visible del hub
-    local visible = true
-    toggleButton.MouseButton1Click:Connect(function()
-        visible = not visible
-        for _, gui in pairs(playerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui ~= toggleButton.Parent then
-                gui.Enabled = visible
+    -- función auxiliar: encontrar el ScreenGui de Fluent (fallbacks seguros)
+    local function findFluentGui()
+        -- 1) Preferencia: Library.GUI (la referencia que tu script pone en memoria)
+        if type(Library) == "table" and Library.GUI and Library.GUI:IsA("ScreenGui") then
+            return Library.GUI
+        end
+
+        -- 2) Buscar por nombre que contenga "fluent"
+        for _, g in ipairs(playerGui:GetChildren()) do
+            if g:IsA("ScreenGui") and g.Name:lower():find("fluent") then
+                return g
             end
         end
-    end)
 
-    -- Animación de toque
-    local TweenService = game:GetService("TweenService")
-    local function pulse()
-        local tweenIn = TweenService:Create(toggleButton, TweenInfo.new(0.1), {Size = UDim2.fromOffset(BUTTON_SIZE * 0.9, BUTTON_SIZE * 0.9)})
-        local tweenOut = TweenService:Create(toggleButton, TweenInfo.new(0.1), {Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)})
+        -- 3) Buscar screenGui que parezca una interfaz (tiene frames/textlabels con texto)
+        for _, g in ipairs(playerGui:GetChildren()) do
+            if g:IsA("ScreenGui") and g ~= ToggleScreenGui then
+                -- heurística: si tiene descendant TextLabel con texto y UICorner/TitleBar estilo
+                local found = false
+                for _, d in ipairs(g:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text ~= "" then
+                        -- evitar game UIs con textos dinámicos muy distintos comprobando longitud
+                        if #d.Text > 1 and #d.Text < 160 then
+                            found = true
+                            break
+                        end
+                    end
+                end
+                if found then
+                    return g
+                end
+            end
+        end
+
+        return nil
+    end
+
+    -- Estado visible (siempre empieza visible)
+    local visible = true
+    local targetGui = findFluentGui()
+
+    -- (Opcional) si no lo encontró inmediatamente, intenta reintentar en unos instantes
+    if not targetGui then
+        spawn(function()
+            for i = 1, 8 do
+                task.wait(0.08)
+                targetGui = findFluentGui()
+                if targetGui then break end
+            end
+        end)
+    end
+
+    -- Función para togglear solo el GUI objetivo
+    local function toggleFluent()
+        -- pulsación: pequeña animación
+        local tweenIn = TweenService:Create(toggleButton, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(BUTTON_SIZE * 0.9, BUTTON_SIZE * 0.9)})
+        local tweenOut = TweenService:Create(toggleButton, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)})
         tweenIn:Play()
         tweenIn.Completed:Wait()
         tweenOut:Play()
+
+        visible = not visible
+
+        -- si tenemos la referencia directa
+        if targetGui and targetGui.Parent then
+            -- Solo togglear esa GUI, nada más
+            targetGui.Enabled = visible
+            return
+        end
+
+        -- intentar volver a buscar (fallback)
+        targetGui = findFluentGui()
+        if targetGui and targetGui.Parent then
+            targetGui.Enabled = visible
+            return
+        end
+
+        -- último recurso: no hacemos nada para evitar romper otros GUIs
+        warn("[FluentToggle] No se encontró Fluent GUI para togglear. No se ocultó ningún ScreenGui.")
     end
 
-    toggleButton.MouseButton1Click:Connect(pulse)
+    -- Conectar el botón
+    toggleButton.MouseButton1Click:Connect(toggleFluent)
 end
 
 return Library, SaveManager, InterfaceManager, Mobile
